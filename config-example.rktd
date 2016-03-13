@@ -1,0 +1,6 @@
+#hash((server . "chat.freenode.net")
+      (port . 6667)
+      (ssl . #t)
+      (nick . "moistbot")
+      (channels . ("##<3"))
+      (prefix . "@"))
