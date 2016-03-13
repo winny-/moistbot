@@ -97,7 +97,7 @@
 
 (define/contract (bot-version m)
   (-> message? void?)
-  (reply m "Reporting in! [Racket]"))
+  (reply m "Reporting in! [Racket] https://github.com/winny-/moistbot"))
 
 (define/contract (eval-lang m [lang 'racket])
   ((message?) (symbol?) . ->* . void?)
