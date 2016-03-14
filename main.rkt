@@ -12,7 +12,7 @@
 ;; Structures
 ;;;;;;;;;;;;;
 
-(struct message (connection source command rest original))
+(struct message (connection source command rest text original))
 
 ;;;;;;;
 ;; Util
@@ -104,6 +104,25 @@
   (with-handlers [(exn:fail? (λ (e) (reply m (format "Sandbox terminated: ~a" (string-replace (exn-message e) "\n" " ")))))]
              (reply m (~s ((make-evaluator lang) (message-rest m))))))
 
+(define/contract (do-rpn m)
+  (message? . -> . void?)
+  (define (rpn lst [stack (list)])
+    (if (empty? lst)
+        stack
+        #;(if (empty? stack) 0 (take-right stack 1))
+        (match (car lst)
+          [(? number? n) (rpn (cdr lst) (append stack (list n)))]
+          [(? symbol? sym) (define-values (l r) (split-at stack (- (length stack) 2)))
+           (rpn (cdr lst) (append l (list (apply (symbol->op sym) r))))])))
+  (define (symbol->op sym)
+    (match sym
+      ['+ +]
+      ['- -]
+      ['* *]
+      ['/ /]))
+  (with-handlers [(exn:fail? (λ (e) (reply m (format "Bad expression (~a)" (string-replace (exn-message e) "\n" " ")))))]
+    (reply m (~s (rpn (map (λ (s) (define n (string->number s)) (or n (string->symbol s))) (string-split (message-rest m))))))))
+
 ;(command "echo" (reply m (message-rest m)))
 
 (define commands
@@ -112,7 +131,8 @@
         "read-url" read-url
         "eval" eval-lang
         "eval-typed" (curryr eval-lang 'typed/racket)
-        "help" (λ (m) (reply m (string-append "Commands available are: " (string-join (hash-keys commands)))))))
+        "help" (λ (m) (reply m (string-append "Commands available are: " (string-join (hash-keys commands)))))
+        "rpn" do-rpn))
 
 ;;;;;;;;;;;;;;;;;;;
 ;; IRC Bot routines
@@ -124,6 +144,18 @@
   (irc-send-message (message-connection m) (message-source m) text)
   (void))
 
+(define/contract (find-trigger msg dispatch-table)
+  (irc-message? hash? . -> . hash?)
+  (define (want-trigger? trig)
+    (match trig
+      [(? string?) (string=? (string-downcase (message-command msg)) trig)]
+      [(? regexp?) (regexp-match (message-text msg))]
+      [_ #f]))
+  (define h (for/hash ([(k v) (in-hash dispatch-table)]
+                       #:when (want-trigger? k))
+              (values k v)))
+  (and (not (hash-empty? h)) h))
+
 (define/contract (handle-irc-message irc-msg connection config)
   (-> irc-message? irc-connection? hash? void?)
   (let* ([prefix (hash-ref config 'prefix)]
@@ -134,7 +166,7 @@
          [is-command (string-prefix? (first parts) prefix)]
          [command (if is-command (string-trim (first parts) prefix #:right? #f) #f)]
          [mtext (if is-command (string-join (rest parts)) text)]
-         [m (message connection source command mtext irc-msg)])
+         [m (message connection source command mtext text irc-msg)])
     (cond
       [is-command (log-debug "Is a command: '~a'" command)
                   (thread (thunk ((hash-ref commands command (λ () identity)) m)))]
