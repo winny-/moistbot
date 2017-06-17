@@ -177,6 +177,12 @@
 (define/contract (bot-loop connection config)
   (-> irc-connection? hash? void?)
   (define inc (irc-connection-incoming connection))
+  (thread
+   (thunk
+    (displayln "Waiting 10 seconds to join ...")
+    (sleep 10)
+    (for ([channel (hash-ref config 'channels)])
+        (irc-join-channel connection channel))))
   (let loop ()
     (let* ([msg (sync inc)]
            [command (irc-message-command msg)])
@@ -214,8 +220,6 @@
       (exit 1)))
 
   (log-info "Connection ready.")
-
-  (map (curry irc-join-channel connection) (hash-ref config 'channels))
 
   (bot-loop connection config)
   (void))
