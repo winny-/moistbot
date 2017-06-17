@@ -184,6 +184,13 @@
       (match (string-downcase command)
         ["privmsg" (displayln (log-debug (format "Handling privmsg ~a" msg)))
          (handle-irc-message msg connection config)]
+        ["ping"
+         (thread
+          (thunk
+           (define p (irc-message-parameters msg))
+           (unless (empty? p)
+             (displayln (log-debug (format "Handling PING ~a" (car p))))
+             (irc-send-command connection "PONG" (car p)))))]
         [_ #f])
       (loop)))
     (void))
